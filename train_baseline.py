@@ -111,3 +111,13 @@ print("Model saved.")
 
 # 12. TEST PREDICTIONS
 test_preds = final_model.predict_proba(test)[:, 1]
+
+# day1
+print(final_model.get_params())
+
+importance_df = pd.DataFrame({
+    "feature": X.columns,
+    "importance": feature_importances
+}).sort_values("importance", ascending=False)
+
+print(importance_df.head(20))
