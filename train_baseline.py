@@ -77,6 +77,31 @@ print(grid_search.best_score_)
 best_model = grid_search.best_estimator_
 joblib.dump(best_model, "best_lgbm_model_fromDAY2.pkl")
 
+
+from sklearn.model_selection import train_test_split
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=1)
+
+import optuna
+def objective(trial):
+    num_leaves = trial.suggest_int("num_leaves", 20, 300)
+    learning_rate = trial.suggest_float("learning_rate", 0.005, 0.1, log=True)
+    max_depth = trial.suggest_int("max_depth", 3, 12)
+    min_child_samples = trial.suggest_int("min_child_samples", 10, 150)
+    model = lgb.LGBMClassifier(num_leaves=num_leaves, 
+                               learning_rate=learning_rate,
+                               max_depth=max_depth,
+                               min_child_samples=min_child_samples,
+                               n_estimators=2000,
+                               random_state=1,
+                               n_jobs=-1,
+                               verbose=-1)
+    model.fit(X_train, y_train)
+    
+    auc = roc_auc_score(y_val, model.predict_proba(X_val)[:, 1])
+    return auc
+
+study = optuna.create_study(direction="maximize")
+
 """
 skfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
 
