@@ -52,6 +52,7 @@ lgb_params = {
     "random_state": 42,
     "n_jobs": -1}
 
+"""
 # day2
 from sklearn.model_selection import GridSearchCV
 param_grid = {
@@ -76,7 +77,7 @@ print(grid_search.best_score_)
 
 best_model = grid_search.best_estimator_
 joblib.dump(best_model, "best_lgbm_model_fromDAY2.pkl")
-
+"""
 
 from sklearn.model_selection import train_test_split
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=1)
@@ -91,7 +92,7 @@ def objective(trial):
                                learning_rate=learning_rate,
                                max_depth=max_depth,
                                min_child_samples=min_child_samples,
-                               n_estimators=2000,
+                               n_estimators=300,
                                random_state=1,
                                n_jobs=-1,
                                verbose=-1)
@@ -101,6 +102,14 @@ def objective(trial):
     return auc
 
 study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=20)
+print(10*"-", "Data retrieved from this optimization", 10*"-")
+print(f"Best Parameters: {study.best_params} - Best Value: {study.best_value}")
+
+import json
+with open("best_params_day3.json", "w") as f:
+    json.dump(study.best_params, f, indent=2)
+joblib.dump(study, "optuna_study_day3.pkl")
 
 """
 skfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
