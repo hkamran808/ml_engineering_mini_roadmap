@@ -31,11 +31,19 @@ for col in cat_cols:
     X[col] = le.transform(X[col].astype(str))
     test[col] = le.transform(test[col].astype(str))
 
+flag_cols = [col for col in X.columns if col.startswith("FLAG_")]
+
 X["CREDIT_INCOME_RATIO"] = X["AMT_CREDIT"] / (X["AMT_INCOME_TOTAL"] + 1)
 X["ANNUITY_INCOME_RATIO"] = X["AMT_ANNUITY"] / (X["AMT_INCOME_TOTAL"] + 1)
+X["EMPLOYED_TO_AGE_RATIO"] = X["DAYS_EMPLOYED"].abs() / (X["DAYS_BIRTH"].abs() + 1)
+X["ANNUITY_TO_CAR_AGE"] = X["AMT_ANNUITY"] / (X["OWN_CAR_AGE"].fillna(0) + 1)
+X["FLAG_COUNT"] = X[flag_cols].sum(axis=1)
 
 test["CREDIT_INCOME_RATIO"] = test["AMT_CREDIT"] / (test["AMT_INCOME_TOTAL"] + 1)
 test["ANNUITY_INCOME_RATIO"] = test["AMT_ANNUITY"] / (test["AMT_INCOME_TOTAL"] + 1)
+test["EMPLOYED_TO_AGE_RATIO"] = test["DAYS_EMPLOYED"].abs() / (test["DAYS_BIRTH"].abs() + 1)
+test["ANNUITY_TO_CAR_AGE"] = test["AMT_ANNUITY"] / (test["OWN_CAR_AGE"].fillna(0) + 1)
+test["FLAG_COUNT"] = test[flag_cols].sum(axis=1)
 
 X.columns = X.columns.str.replace('[^A-Za-z0-9_]+', '', regex=True)
 test.columns = test.columns.str.replace('[^A-Za-z0-9_]+', '', regex=True)
@@ -101,66 +109,37 @@ def objective(trial):
     auc = roc_auc_score(y_val, model.predict_proba(X_val)[:, 1])
     return auc
 
-study = optuna.create_study(direction="maximize")
-study.optimize(objective, n_trials=20)
-print(10*"-", "Data retrieved from this optimization", 10*"-")
-print(f"Best Parameters: {study.best_params} - Best Value: {study.best_value}")
-
 import json
-with open("best_params_day3.json", "w") as f:
-    json.dump(study.best_params, f, indent=2)
-joblib.dump(study, "optuna_study_day3.pkl")
+RUN_OPTUNA = False
+if RUN_OPTUNA:
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=20)
+    print(10*"-", "Data retrieved from this optimization", 10*"-")
+    print(f"Best Parameters: {study.best_params} - Best Value: {study.best_value}")
+    with open("best_params_day3.json", "w") as f:
+        json.dump(study.best_params, f, indent=2)
+    joblib.dump(study, "optuna_study_day3.pkl")
 
-"""
-skfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
+with open("best_params_day3.json", "r") as f:
+    best_params = json.load(f)
 
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
 oof_preds = np.zeros(len(X))
-feature_importances = np.zeros(X.shape[1])
 
-for fold, (train_idx, val_idx) in enumerate(skfold.split(X, y)):
+for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+    X_train_OOF, y_train_OOF = X.iloc[train_idx], y.iloc[train_idx]
+    X_val_OOF, y_val_OOF = X.iloc[val_idx], y.iloc[val_idx]
+    
+    model = lgb.LGBMClassifier(**best_params, 
+                               n_estimators=300, 
+                               random_state=1, 
+                               n_jobs=-1, 
+                               verbosity=-1)
+    model.fit(X_train_OOF, y_train_OOF)
+    
+    oof_preds[val_idx] = model.predict_proba(X_val_OOF)[:, 1]
+    print(f"Fold {fold+1} AUC:", roc_auc_score(y_val_OOF, oof_preds[val_idx]))
 
-    print(f"\nFold {fold+1}")
+print("Overall OOF AUC:", roc_auc_score(y, oof_preds))
 
-    X_train = X.iloc[train_idx]
-    y_train = y.iloc[train_idx]
-
-    X_val = X.iloc[val_idx]
-    y_val = y.iloc[val_idx]
-
-    model = lgb.LGBMClassifier(**lgb_params)
-
-    model.fit(
-        X_train,
-        y_train,
-        eval_set=[(X_val, y_val)],
-        eval_metric="auc",
-        callbacks=[lgb.early_stopping(200), lgb.log_evaluation(100)])
-
-    val_preds = model.predict_proba(X_val)[:, 1]
-    oof_preds[val_idx] = val_preds
-    fold_auc = roc_auc_score(y_val, val_preds)
-    print("Fold AUC:", fold_auc)
-
-    feature_importances += model.feature_importances_ / skfold.n_splits
-
-full_auc = roc_auc_score(y, oof_preds)
-print("\nOverall OOF ROC AUC:", full_auc)
-
-final_model = lgb.LGBMClassifier(**lgb_params)
-final_model.fit(X, y)
-
-joblib.dump(final_model, "credit_risk_lgbm.pkl")
-print("Model saved.")
-
-test_preds = final_model.predict_proba(test)[:, 1]
-
-# day1
-print(final_model.get_params())
-
-importance_df = pd.DataFrame({
-    "feature": X.columns,
-    "importance": feature_importances
-}).sort_values("importance", ascending=False)
-
-print(importance_df.head(20))
-"""
+# run ele!
