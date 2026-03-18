@@ -35,16 +35,18 @@ flag_cols = [col for col in X.columns if col.startswith("FLAG_")]
 
 X["CREDIT_INCOME_RATIO"] = X["AMT_CREDIT"] / (X["AMT_INCOME_TOTAL"] + 1)
 X["ANNUITY_INCOME_RATIO"] = X["AMT_ANNUITY"] / (X["AMT_INCOME_TOTAL"] + 1)
+"""
 X["EMPLOYED_TO_AGE_RATIO"] = X["DAYS_EMPLOYED"].abs() / (X["DAYS_BIRTH"].abs() + 1)
 X["ANNUITY_TO_CAR_AGE"] = X["AMT_ANNUITY"] / (X["OWN_CAR_AGE"].fillna(0) + 1)
 X["FLAG_COUNT"] = X[flag_cols].sum(axis=1)
-
+"""
 test["CREDIT_INCOME_RATIO"] = test["AMT_CREDIT"] / (test["AMT_INCOME_TOTAL"] + 1)
 test["ANNUITY_INCOME_RATIO"] = test["AMT_ANNUITY"] / (test["AMT_INCOME_TOTAL"] + 1)
+"""
 test["EMPLOYED_TO_AGE_RATIO"] = test["DAYS_EMPLOYED"].abs() / (test["DAYS_BIRTH"].abs() + 1)
 test["ANNUITY_TO_CAR_AGE"] = test["AMT_ANNUITY"] / (test["OWN_CAR_AGE"].fillna(0) + 1)
 test["FLAG_COUNT"] = test[flag_cols].sum(axis=1)
-
+"""
 X.columns = X.columns.str.replace('[^A-Za-z0-9_]+', '', regex=True)
 test.columns = test.columns.str.replace('[^A-Za-z0-9_]+', '', regex=True)
 
@@ -142,4 +144,23 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
 
 print("Overall OOF AUC:", roc_auc_score(y, oof_preds))
 
-# run ele!
+# stacking: multiple models and OOFs *logistic reg and lgbm in our case, just for now
+oof_lgbm = np.zeros(len(X))
+oof_logreg = np.zeros(len(X))
+
+for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+    X_train_OOF_lgbm, y_train_OOF_lgbm = X.iloc[train_idx], y.iloc[train_idx]
+    X_val_OOF_lgbm, y_val_OOF_lgbm = X.iloc[val_idx], y.iloc[val_idx]
+
+    model_stack = lgb.LGBMClassifier(**best_params, 
+                               n_estimators=300, 
+                               random_state=1, 
+                               n_jobs=-1, 
+                               verbosity=-1)
+    
+    model_stack.fit(X_train_OOF_lgbm, y_train_OOF_lgbm)
+
+    oof_lgbm[val_idx] = model_stack.predict_proba(X_val_OOF_lgbm)[:, 1]
+    print(f"Fold {fold+1} AUC:", roc_auc_score(y_val_OOF_lgbm, oof_lgbm[val_idx]))
+
+print("Overall OOF LGBM AUC:", roc_auc_score(y, oof_lgbm))
