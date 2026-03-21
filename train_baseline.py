@@ -126,6 +126,7 @@ with open("best_params_day3.json", "r") as f:
     best_params = json.load(f)
 
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
+"""
 oof_preds = np.zeros(len(X))
 
 for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
@@ -143,24 +144,51 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
     print(f"Fold {fold+1} AUC:", roc_auc_score(y_val_OOF, oof_preds[val_idx]))
 
 print("Overall OOF AUC:", roc_auc_score(y, oof_preds))
-
+"""
 # stacking: multiple models and OOFs *logistic reg and lgbm in our case, just for now
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+X_scaled = pd.DataFrame(X_scaled, columns=X.columns)
+
+from sklearn.linear_model import LogisticRegression
+logreg = LogisticRegression(max_iter=300, n_jobs=-1)
+
 oof_lgbm = np.zeros(len(X))
 oof_logreg = np.zeros(len(X))
 
 for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+
+    X_train_OOF_logreg, y_train_OOF_logreg = X_scaled.iloc[train_idx], y.iloc[train_idx]
+    X_val_OOF_logreg, y_val_OOF_logreg = X_scaled.iloc[val_idx], y.iloc[val_idx]
+
+    logreg.fit(X_train_OOF_logreg, y_train_OOF_logreg)
+    oof_logreg[val_idx] = logreg.predict_proba(X_val_OOF_logreg)[:, 1]
+
     X_train_OOF_lgbm, y_train_OOF_lgbm = X.iloc[train_idx], y.iloc[train_idx]
     X_val_OOF_lgbm, y_val_OOF_lgbm = X.iloc[val_idx], y.iloc[val_idx]
-
-    model_stack = lgb.LGBMClassifier(**best_params, 
+    lgbm_stack = lgb.LGBMClassifier(**best_params, 
                                n_estimators=300, 
                                random_state=1, 
                                n_jobs=-1, 
                                verbosity=-1)
     
-    model_stack.fit(X_train_OOF_lgbm, y_train_OOF_lgbm)
+    lgbm_stack.fit(X_train_OOF_lgbm, y_train_OOF_lgbm)
 
-    oof_lgbm[val_idx] = model_stack.predict_proba(X_val_OOF_lgbm)[:, 1]
-    print(f"Fold {fold+1} AUC:", roc_auc_score(y_val_OOF_lgbm, oof_lgbm[val_idx]))
+    oof_lgbm[val_idx] = lgbm_stack.predict_proba(X_val_OOF_lgbm)[:, 1]
+    print(f"Fold {fold+1} LGBM AUC:", roc_auc_score(y_val_OOF_lgbm, oof_lgbm[val_idx]))
+    print(f"Fold {fold+1} LogReg AUC:", roc_auc_score(y_val_OOF_logreg, oof_logreg[val_idx]))
 
 print("Overall OOF LGBM AUC:", roc_auc_score(y, oof_lgbm))
+print("Overall OOF LogReg AUC:", roc_auc_score(y, oof_logreg))
+
+# stacking up models: creating meta-features and training a meta-model on top of them
+meta_X = np.column_stack((oof_lgbm, oof_logreg))
+meta_model = LogisticRegression(max_iter=300, n_jobs=-1)
+meta_model.fit(meta_X, y)
+
+from sklearn.model_selection import cross_val_score
+meta_auc = cross_val_score(meta_model, 
+                           meta_X, y, 
+                           cv=skf, scoring="roc_auc")
+print("Meta-model CV AUC:", meta_auc.mean())
