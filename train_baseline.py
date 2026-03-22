@@ -1,3 +1,7 @@
+import os
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
@@ -146,9 +150,14 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
 print("Overall OOF AUC:", roc_auc_score(y, oof_preds))
 """
 # stacking: multiple models and OOFs *logistic reg and lgbm in our case, just for now
+from sklearn.impute import SimpleImputer
+imputer = SimpleImputer(strategy="median")
+X_imputed = imputer.fit_transform(X)
+X_imputed = pd.DataFrame(X_imputed, columns=X.columns)
+
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+X_scaled = scaler.fit_transform(X_imputed)
 X_scaled = pd.DataFrame(X_scaled, columns=X.columns)
 
 from sklearn.linear_model import LogisticRegression
