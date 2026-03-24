@@ -1,3 +1,6 @@
+import mlflow
+mlflow.set_experiment("credit-risk-home_project")
+
 import os
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -166,38 +169,44 @@ logreg = LogisticRegression(max_iter=300, n_jobs=-1)
 oof_lgbm = np.zeros(len(X))
 oof_logreg = np.zeros(len(X))
 
-for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+with mlflow.start_run(run_name="Baseline LGBM with Stacking"):
+    for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
 
-    X_train_OOF_logreg, y_train_OOF_logreg = X_scaled.iloc[train_idx], y.iloc[train_idx]
-    X_val_OOF_logreg, y_val_OOF_logreg = X_scaled.iloc[val_idx], y.iloc[val_idx]
+        X_train_OOF_logreg, y_train_OOF_logreg = X_scaled.iloc[train_idx], y.iloc[train_idx]
+        X_val_OOF_logreg, y_val_OOF_logreg = X_scaled.iloc[val_idx], y.iloc[val_idx]
 
-    logreg.fit(X_train_OOF_logreg, y_train_OOF_logreg)
-    oof_logreg[val_idx] = logreg.predict_proba(X_val_OOF_logreg)[:, 1]
+        logreg.fit(X_train_OOF_logreg, y_train_OOF_logreg)
+        oof_logreg[val_idx] = logreg.predict_proba(X_val_OOF_logreg)[:, 1]
 
-    X_train_OOF_lgbm, y_train_OOF_lgbm = X.iloc[train_idx], y.iloc[train_idx]
-    X_val_OOF_lgbm, y_val_OOF_lgbm = X.iloc[val_idx], y.iloc[val_idx]
-    lgbm_stack = lgb.LGBMClassifier(**best_params, 
-                               n_estimators=300, 
-                               random_state=1, 
-                               n_jobs=-1, 
-                               verbosity=-1)
-    
-    lgbm_stack.fit(X_train_OOF_lgbm, y_train_OOF_lgbm)
+        X_train_OOF_lgbm, y_train_OOF_lgbm = X.iloc[train_idx], y.iloc[train_idx]
+        X_val_OOF_lgbm, y_val_OOF_lgbm = X.iloc[val_idx], y.iloc[val_idx]
+        lgbm_stack = lgb.LGBMClassifier(**best_params, 
+                                n_estimators=300, 
+                                random_state=1, 
+                                n_jobs=-1, 
+                                verbosity=-1)
+        
+        lgbm_stack.fit(X_train_OOF_lgbm, y_train_OOF_lgbm)
 
-    oof_lgbm[val_idx] = lgbm_stack.predict_proba(X_val_OOF_lgbm)[:, 1]
-    print(f"Fold {fold+1} LGBM AUC:", roc_auc_score(y_val_OOF_lgbm, oof_lgbm[val_idx]))
-    print(f"Fold {fold+1} LogReg AUC:", roc_auc_score(y_val_OOF_logreg, oof_logreg[val_idx]))
+        oof_lgbm[val_idx] = lgbm_stack.predict_proba(X_val_OOF_lgbm)[:, 1]
+        print(f"Fold {fold+1} LGBM AUC:", roc_auc_score(y_val_OOF_lgbm, oof_lgbm[val_idx]))
+        print(f"Fold {fold+1} LogReg AUC:", roc_auc_score(y_val_OOF_logreg, oof_logreg[val_idx]))
 
-print("Overall OOF LGBM AUC:", roc_auc_score(y, oof_lgbm))
-print("Overall OOF LogReg AUC:", roc_auc_score(y, oof_logreg))
+    print("Overall OOF LGBM AUC:", roc_auc_score(y, oof_lgbm))
+    print("Overall OOF LogReg AUC:", roc_auc_score(y, oof_logreg))
 
-# stacking up models: creating meta-features and training a meta-model on top of them
-meta_X = np.column_stack((oof_lgbm, oof_logreg))
-meta_model = LogisticRegression(max_iter=300, n_jobs=-1)
-meta_model.fit(meta_X, y)
+    # stacking up models: creating meta-features and training a meta-model on top of them
+    meta_X = np.column_stack((oof_lgbm, oof_logreg))
+    meta_model = LogisticRegression(max_iter=300, n_jobs=-1)
+    meta_model.fit(meta_X, y)
 
-from sklearn.model_selection import cross_val_score
-meta_auc = cross_val_score(meta_model, 
-                           meta_X, y, 
-                           cv=skf, scoring="roc_auc")
-print("Meta-model CV AUC:", meta_auc.mean())
+    from sklearn.model_selection import cross_val_score
+    meta_auc = cross_val_score(meta_model, 
+                            meta_X, y, 
+                            cv=skf, scoring="roc_auc")
+    print("Meta-model CV AUC:", meta_auc.mean())
+
+    mlflow.log_params(best_params)
+    mlflow.log_metric("OOF_LGBM_AUC", roc_auc_score(y, oof_lgbm))
+    mlflow.log_metric("OOF_LogReg_AUC", roc_auc_score(y, oof_logreg))
+    mlflow.log_metric("Meta_Model_CV_AUC", meta_auc.mean())
