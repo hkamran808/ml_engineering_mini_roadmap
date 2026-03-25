@@ -28,6 +28,7 @@ y = train["TARGET"]
 X = train.drop(columns=["TARGET"])
 
 cat_cols = X.select_dtypes(include=["object"]).columns
+encoders = {}
 for col in cat_cols:
     
     le = LabelEncoder()
@@ -37,6 +38,10 @@ for col in cat_cols:
     
     X[col] = le.transform(X[col].astype(str))
     test[col] = le.transform(test[col].astype(str))
+
+    encoders[col] = le  # saving encoders for future use (e.g., in prediction in day7)
+
+joblib.dump(encoders, "label_encoders.pkl")
 
 flag_cols = [col for col in X.columns if col.startswith("FLAG_")]
 
