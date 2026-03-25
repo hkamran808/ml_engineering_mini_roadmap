@@ -9,12 +9,19 @@ class CreditRiskPredictor:
         self.model = joblib.load(self.model_path)
         self.encoders = joblib.load(self.encoders_path)  # "label_encoders.pkl" for categorical features
 
+    def engineer_features(self, df):  #our feature engineering function, same as in training file
+        df["CREDIT_INCOME_RATIO"] = df["AMT_CREDIT"] / (df["AMT_INCOME_TOTAL"] + 1)
+        df["ANNUITY_INCOME_RATIO"] = df["AMT_ANNUITY"] / (df["AMT_INCOME_TOTAL"] + 1)
+        return df
+
     def preprocess(self, applicant_data):
         df = pd.DataFrame([applicant_data])
         for col, le in self.encoders.items():
             if col in applicant_data:
                 df[col] = le.transform([df[col].astype(str)])
+        df = self.engineer_features(df)
         return df
+    
     def predict(self, applicant_data):
         df1 = self.preprocess(applicant_data)
         return float(self.model.predict_proba(df1)[:, 1][0])
