@@ -18,7 +18,7 @@ class CreditRiskPredictor:
         df = pd.DataFrame([applicant_data])
         for col, le in self.encoders.items():
             if col in applicant_data:
-                df[col] = le.transform([df[col].astype(str)])
+                df[col] = le.transform(df[col].astype(str).values)
         df = self.engineer_features(df)
         return df
     
