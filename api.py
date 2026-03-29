@@ -14,8 +14,8 @@ class ApplicantInput(BaseModel):
     AMT_INCOME_TOTAL: float
     AMT_CREDIT: float
     AMT_ANNUITY: float
-    # we may add other features as needed, matching the training data
-    class Config:
+
+    class Config:  # we add this to allow extra fields in the input, since our model expects more features, they being in new test api file
         extra = "allow"
 @app.post("/predict")
 def predict(applicant: ApplicantInput):
