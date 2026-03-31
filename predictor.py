@@ -20,7 +20,12 @@ class CreditRiskPredictor:
             if col in applicant_data:
                 df[col] = le.transform(df[col].astype(str).values)
         df = self.engineer_features(df)
-        df = df.apply(pd.to_numeric, errors='ignore')
+        #df = df.apply(lambda col: pd.to_numeric(col, errors="coerce").fillna(col)) / df = df.apply(pd.to_numeric, errors='ignore')
+        for col in df.columns:
+            try:
+                df[col] = pd.to_numeric(df[col])
+            except:
+                pass
         return df
     
     def predict(self, applicant_data):
