@@ -7,8 +7,8 @@ sample = X_sample.drop(columns=["SK_ID_CURR", "TARGET"]).to_dict(orient="records
 
 sample = {k: (None if isinstance(v, float) and np.isnan(v) else v) for k, v in sample.items()} #to avoid error with NaN values in the input, we replace them with None, since our JSON does not support it
 
-#response = requests.post("http://127.0.0.1:8000/predict", json=sample)
-response = requests.post("https://mlengineeringminiroadmap-production.up.railway.app/predict", json=sample)
+response = requests.post("http://127.0.0.1:8000/predict", json=sample)
+#response = requests.post("https://mlengineeringminiroadmap-production.up.railway.app/predict", json=sample) #commented out to post locally again since we have to create log file on local machine so we can use monitoring.py
 print(response.status_code)
 print(response.text)
 print(response.json())

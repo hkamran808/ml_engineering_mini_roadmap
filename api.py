@@ -1,3 +1,4 @@
+from msgspec import field
 import pandas as pd
 from fastapi import FastAPI
 from predictor import CreditRiskPredictor
@@ -5,9 +6,12 @@ from pydantic import BaseModel
 from typing import Optional
 import csv
 import datetime
-from evidently import ColumnMapping
-from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset
+from evidently import Report
+from evidently.presets import DataDriftPreset
+
+import os
+log_file = "prediction_log.csv"
+file_exists = os.path.exists(log_file)
 
 app = FastAPI()
 predictor = CreditRiskPredictor("credit_risk_lgbm.pkl", "label_encoders.pkl")
@@ -26,7 +30,9 @@ class ApplicantInput(BaseModel):
 @app.post("/predict")
 def predict(applicant: ApplicantInput):
     our_result = predictor.predict(applicant.model_dump())  # replacement for .dict() in newer pydantic version v2
-    with open("prediction_log.csv", mode="a") as file:
-        writer = csv.writer(file)
-        writer.writerow([datetime.datetime.now(), applicant.model_dump(), our_result])
+    with open(log_file, mode="a") as file:
+        writer = csv.DictWriter(file, fieldnames=list(applicant.model_dump().keys()) + ["timestamp", "prediction"])
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({**applicant.model_dump(), "timestamp": datetime.datetime.now(), "prediction": our_result})
     return {"default_probability": our_result}
