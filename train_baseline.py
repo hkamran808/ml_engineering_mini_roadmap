@@ -215,3 +215,17 @@ with mlflow.start_run(run_name="Baseline LGBM with Stacking"):
     mlflow.log_metric("OOF_LGBM_AUC", roc_auc_score(y, oof_lgbm))
     mlflow.log_metric("OOF_LogReg_AUC", roc_auc_score(y, oof_logreg))
     mlflow.log_metric("Meta_Model_CV_AUC", meta_auc.mean())
+
+import joblib
+
+joblib.dump(imputer, "imputer.pkl")
+joblib.dump(scaler, "scaler.pkl")
+
+final_lgbm = lgb.LGBMClassifier(**best_params, n_estimators=300,
+                                  random_state=1, n_jobs=-1, verbosity=-1)
+final_lgbm.fit(X, y)
+joblib.dump(final_lgbm, "lgbm_model.pkl")
+joblib.dump(meta_model, "meta_model.pkl")
+joblib.dump(list(X.columns), "feature_columns.pkl")
+
+print("All 5 pkl files saved")
